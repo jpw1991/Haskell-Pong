@@ -8,6 +8,7 @@ import Drawing
 import Timer
 import Game
 import Input
+import Logic
 
 import Control.Monad
 import Control.Monad.State
@@ -155,16 +156,20 @@ loop = do
     --
     -- In other words, we now update the paddle and ball positions.
     -------------------------------
-    
-    
     modifyGameData $ handleLeftPaddleState
     modifyGameData $ handleRightPaddleState
     modifyGameData $ handleBallState
     
-    --data1    <- getGameData
-    --let p1 = player data1
-    
-    --modifyGameData $ updateGameData $ handleMState p1
+    -------------------------------
+    -- Collision checking
+    --
+    -- We now need to check if the ball has met a paddle or a wall,
+    -- in which case we need to invert the ball's direction.
+    -- 
+    -- If the ball meets the left wall or the right wall, we need
+    -- to adjust the players' score.
+    -------------------------------
+    modifyGameData $ handleCollision b p1 p2
     
     -------------------------------
     -- The GameData has now been updated.
@@ -186,15 +191,11 @@ loop = do
     -- draw the ball
     drawObject (ballPOS gdata) b screen
     
-    
-    ---- Update player pos ----
-    -- The input has perhaps changed the velocity of the player, so we
-    -- need to recalculate the player's position
-    --modifyGameData $ updateGameData $ updatePlayerPos (player gdata)
-    
-    -- player should always be drawn in the center of the screen
-    --let pldrawx = (div screenWidth 2)  - (div (SDL.surfaceGetWidth  $ playerlm !! 0) 2)
-    --let pldrawy = (div screenHeight 2) - (div (SDL.surfaceGetHeight $ playerlm !! 0) 2)
+    -- show the score
+    p1score <- liftIO $ SDLTTF.renderTextSolid font ("Red: " ++ (show $ scoreLEFT gdata)) (SDL.Color 255 10 10)
+    p2score <- liftIO $ SDLTTF.renderTextSolid font ("Green: " ++ (show $ scoreRIGHT gdata)) (SDL.Color 10 255 10)
+    applySurface'' 0 0 p1score screen Nothing
+    applySurface'' (screenWidth `div` 2) 0 p2score screen Nothing
     
     ---- Draw the scene ----
     liftIO $ SDL.flip screen
@@ -212,6 +213,7 @@ loop = do
     unless quit loop
   
   where
+  
     applySurface'' x y src dst clip = liftIO (applySurface' x y src dst clip)
     
     secsPerFrame = fromIntegral $ 1000 `div` framesPerSecond
@@ -255,6 +257,111 @@ loop = do
       where
         x = fst $ pos
         y = snd $ pos
+    
+    invertBall :: GameData -> GameData
+    invertBall old@GameData { ballSTATE = oldstate } =
+      old { ballSTATE = (invertObjectState oldstate) }
+    
+    -- A function to invert the direction of an object.
+    -- Used flip the ball's direction when it hits a wall
+    -- or a paddle
+    invertObjectState :: ObjectState -> ObjectState
+    invertObjectState a
+      | a == MovingWest      = MovingEast
+      | a == MovingEast      = MovingWest
+      | a == MovingNorth     = MovingSouth
+      | a == MovingSouth     = MovingNorth
+      | a == MovingNorthWest = MovingSouthEast
+      | a == MovingNorthEast = MovingSouthWest
+      | a == MovingSouthWest = MovingNorthEast
+      | a == MovingSouthEast = MovingNorthWest
+      | otherwise            = a
+    
+    -- Inverts an object state's direction but removes any diagonal
+    -- movement.
+    straightInvertObjectState :: ObjectState -> ObjectState
+    straightInvertObjectState a
+      | a == MovingWest      = MovingEast
+      | a == MovingEast      = MovingWest
+      | a == MovingNorth     = MovingNorth -- ?
+      | a == MovingSouth     = MovingSouth -- ?
+      | a == MovingNorthWest = MovingEast
+      | a == MovingNorthEast = MovingWest
+      | a == MovingSouthWest = MovingEast
+      | a == MovingSouthEast = MovingWest
+      | otherwise            = a
+    
+    -- Inverts an object state's direction and adds diagonal movement.
+    diagonalInvertObjectState :: ObjectState -> ObjectState
+    diagonalInvertObjectState a
+      | a == MovingWest      = MovingNorthEast
+      | a == MovingEast      = MovingNorthWest
+      | a == MovingNorth     = MovingNorth -- ?
+      | a == MovingSouth     = MovingSouth -- ?
+      | a == MovingNorthWest = MovingSouthEast
+      | a == MovingNorthEast = MovingSouthWest
+      | a == MovingSouthWest = MovingNorthEast
+      | a == MovingSouthEast = MovingNorthWest
+      | otherwise            = a
+    
+    -- Another function used to invert the direction of an object.
+    -- Instead of the direct opposite, the object is rotated slightly.
+    halfInvertObjectState :: ObjectState -> ObjectState
+    halfInvertObjectState a
+      | a == MovingWest      = MovingNorth
+      | a == MovingEast      = MovingSouth
+      | a == MovingNorth     = MovingWest
+      | a == MovingSouth     = MovingEast
+      | a == MovingNorthWest = MovingSouthWest
+      | a == MovingNorthEast = MovingSouthEast
+      | a == MovingSouthWest = MovingNorthWest
+      | a == MovingSouthEast = MovingNorthEast
+    
+    handleCollision :: SDL.Surface -> SDL.Surface -> SDL.Surface -> GameData -> GameData
+    handleCollision ball p1 p2 old@GameData { ballSTATE = oldstate, scoreLEFT = oldleftscore, scoreRIGHT = oldrightscore, ballSPEED = oldspd, paddleLEFTSPEED = oldlspeed, paddleRIGHTSPEED = oldrspeed } =
+      case (checkForCollision ball p1 p2 old) of
+        LeftScores  -> old { ballSTATE = invertObjectState oldstate, ballPOS = ( (screenWidth `div` 2), (screenHeight `div` 2) ), scoreLEFT = (oldleftscore+1), ballSPEED = 2 }
+        RightScores -> old { ballSTATE = invertObjectState oldstate, ballPOS = ( (screenWidth `div` 2), (screenHeight `div` 2) ), scoreRIGHT = (oldrightscore+1), ballSPEED = 2 }
+        LeftPaddleCollision -> old { ballSTATE = straightInvertObjectState oldstate, ballSPEED = oldspd+1, paddleLEFTSPEED = oldlspeed+1, paddleRIGHTSPEED = oldrspeed+1 }
+        RightPaddleCollision -> old { ballSTATE = straightInvertObjectState oldstate, ballSPEED = oldspd+1, paddleLEFTSPEED = oldlspeed+1, paddleRIGHTSPEED = oldrspeed+1 }
+        LeftPaddleEdgeCollision -> old { ballSTATE = diagonalInvertObjectState oldstate, ballSPEED = oldspd+1, paddleLEFTSPEED = oldlspeed+1, paddleRIGHTSPEED = oldrspeed+1 }
+        RightPaddleEdgeCollision -> old { ballSTATE = diagonalInvertObjectState oldstate, ballSPEED = oldspd+1, paddleLEFTSPEED = oldlspeed+1, paddleRIGHTSPEED = oldrspeed+1 }
+        WallCollision -> old { ballSTATE = (halfInvertObjectState oldstate) }
+        _ -> old
+   
+    
+    checkForCollision :: SDL.Surface -> SDL.Surface -> SDL.Surface -> GameData -> CollisionResult
+    checkForCollision ball p1 p2 gdata
+      | (bx+bw) >= screenWidth  = LeftScores    -- hits right wall
+      | bx <= 0                 = RightScores   -- hits left wall
+      | (by+bh) >= screenHeight = WallCollision -- hits top
+      | by <= 0                 = WallCollision -- hits bottom
+      | boxesIntersect (bx,by) ((bx+bw),(by+bh)) (p1x,p1y) ((p1x + p1w),(p1y + p1h)) =
+        if (by+bh) > (p1y + (p1h `div` 2) + (p1h `div` 4)) || (by+bh) < (p1y + (p1h `div` 2) - (p1h `div` 4)) then
+          LeftPaddleEdgeCollision
+        else
+          LeftPaddleCollision
+      | boxesIntersect (bx,by) ((bx+bw),(by+bh)) (p2x,p2y) ((p2x + p2w),(p2y + p2h)) =
+        if (by+bh) > (p2y + (p2h `div` 2) + (p2h `div` 4)) || (by+bh) < (p2y + (p2h `div` 2) - (p2h `div` 4)) then
+          RightPaddleEdgeCollision
+        else
+          RightPaddleCollision
+      | otherwise               = NoCollision
+      where
+        bx = fst $ ballPOS gdata
+        by = snd $ ballPOS gdata
+        bw = SDL.surfaceGetWidth ball
+        bh = SDL.surfaceGetHeight ball
+        
+        p1x = fst $ paddleLEFTPOS gdata
+        p1y = snd $ paddleLEFTPOS gdata
+        p1w = SDL.surfaceGetWidth p1
+        p1h = SDL.surfaceGetHeight p1
+        
+        p2x = fst $ paddleRIGHTPOS gdata
+        p2y = snd $ paddleRIGHTPOS gdata
+        p2w = SDL.surfaceGetWidth p2
+        p2h = SDL.surfaceGetHeight p2
 
 
 {-- whileEvents --
@@ -286,29 +393,19 @@ whileEvents act = do
 -- Then we return a fresh GameData with new values.
 
 handleInput :: SDL.Event -> GameData -> GameData
-{-
-handleInput (SDL.KeyDown (SDL.Keysym SDL.SDLK_LEFT _ _))  old@GameData { player = oldplayer } =
-  old {
-    player = updatePlayerState MovingLeft oldplayer
-  }
-handleInput (SDL.KeyDown (SDL.Keysym SDL.SDLK_RIGHT _ _)) old@GameData { player = oldplayer } =
-  old {
-    player = updatePlayerState MovingRight oldplayer
-  }
--}
-handleInput _ old@GameData { } =
-  old
+--handleInput (SDL.KeyDown (SDL.Keysym SDL.SDLK_n _ _)) old = newGameData
+handleInput _ old = old
 
 handleKeyState :: KeyProc -> GameData -> GameData
-handleKeyState key old@GameData { }
+handleKeyState key old
   | key SDL.SDLK_UP =
-    old { paddleLEFTSTATE = MovingNorth }
-  | key SDL.SDLK_DOWN =
-    old { paddleLEFTSTATE = MovingSouth }
-  | key SDL.SDLK_w =
     old { paddleRIGHTSTATE = MovingNorth }
-  | key SDL.SDLK_s =
+  | key SDL.SDLK_DOWN =
     old { paddleRIGHTSTATE = MovingSouth }
+  | key SDL.SDLK_w =
+    old { paddleLEFTSTATE = MovingNorth }
+  | key SDL.SDLK_s =
+    old { paddleLEFTSTATE = MovingSouth }
   | otherwise = old { paddleLEFTSTATE = Stationary, paddleRIGHTSTATE = Stationary }
 
 
