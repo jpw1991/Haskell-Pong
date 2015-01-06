@@ -3,6 +3,8 @@ module Game where
 
 import Prelude
 
+import qualified Graphics.UI.SDL as SDL
+
 {-
 
   GameData stores all the state information per loop cycle, for example
@@ -12,14 +14,14 @@ import Prelude
 
 -- the amount of pixels to move while moving
 paddleMovementSpeed :: Int
-paddleMovementSpeed = 1
+paddleMovementSpeed = 2
 
 -- the amount of space between the paddles and the edges of the screen
 paddleMarginBuffer :: Int
 paddleMarginBuffer = 16
 
 -- the states of movement for all objects (paddles and balls)
-data ObjectState = Stationary | MovingWest | MovingEast | MovingNorth | MovingSouth | MovingNorthWest | MovingNorthEast | MovingSouthWest | MovingSouthEast
+data ObjectState = Stationary | MovingWest | MovingEast | MovingNorth | MovingSouth | MovingNorthWest | MovingNorthEast | MovingSouthWest | MovingSouthEast deriving Eq
 
 data GameData = GameData {
   -- left
@@ -33,19 +35,29 @@ data GameData = GameData {
   -- ball
   , ballSTATE         :: ObjectState
   , ballPOS           :: (Int, Int)
+  , ballSPEED         :: Int
 }
 
-newGameData :: Int -> Int -> GameData
-newGameData w h = GameData {
+newGameData :: Int -> Int -> SDL.Surface -> SDL.Surface -> SDL.Surface -> GameData
+newGameData w h p1 p2 b = GameData {
   -- left
     scoreLEFT         = 0
   , paddleLEFTSTATE   = Stationary
-  , paddleLEFTPOS     = ( paddleMarginBuffer, (h `div` 2) )
+  , paddleLEFTPOS     = ( paddleMarginBuffer, ((h `div` 2) - (p1h `div` 2)) )
   -- right
   , scoreRIGHT        = 0
   , paddleRIGHTSTATE  = Stationary
-  , paddleRIGHTPOS    = ( (w-paddleMarginBuffer), (h `div` 2) )
+  , paddleRIGHTPOS    = ( ((w-paddleMarginBuffer) - p2w), ((h `div` 2) - (p1h `div` 2)) )
   -- ball
   , ballSTATE         = Stationary
-  , ballPOS           = ( (w `div` 2), (h `div` 2) )
+  , ballPOS           = ( ((w `div` 2) - (bw `div` 2)), ( (h `div` 2) - (bh `div` 2)) )
+  , ballSPEED         = 2
 }
+  where
+    p1w = SDL.surfaceGetWidth p1
+    p1h = SDL.surfaceGetHeight p1
+    p2w = SDL.surfaceGetWidth p2
+    p2h = SDL.surfaceGetHeight p2
+    bw  = SDL.surfaceGetWidth b
+    bh  = SDL.surfaceGetHeight b
+

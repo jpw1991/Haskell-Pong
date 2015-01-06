@@ -33,48 +33,6 @@ getKeyState = alloca $ \numkeysPtr -> do
       keys <- (map SDLUtil.toEnum . map fromIntegral . findIndices (== 1)) `fmap` peekArray (fromIntegral numkeys) keysPtr
       return $ (`elem` keys)
 
-{- -- handleInput --
-
-  Each button press will return a modified version of the game's data.
-  For example, the user presses DOWN then the paddle's position needs
-  to change; therefore a new version of the GameData is returned which
-  contains this new position.
-
--}
-
--- With the @ operator we keep a reference to the old GameData copy
--- given to the function, and name its variables "oldx" and "oldy".
--- Then we return a fresh GameData with new values.
---
--- I don't permit the coordinates to go into the negative range, because
--- then we're scrolling the map off the screen.
-
-handleInput :: SDL.Event -> GameData -> GameData
-{-
-handleInput (SDL.KeyDown (SDL.Keysym SDL.SDLK_LEFT _ _))  old@GameData { player = oldplayer } =
-  old {
-    player = updatePlayerState MovingLeft oldplayer
-  }
-handleInput (SDL.KeyDown (SDL.Keysym SDL.SDLK_RIGHT _ _)) old@GameData { player = oldplayer } =
-  old {
-    player = updatePlayerState MovingRight oldplayer
-  }
--}
-handleInput _ old@GameData { } =
-  old
-
-handleKeyState :: KeyProc -> GameData -> GameData
-handleKeyState key old@GameData { }
-  | key SDL.SDLK_UP =
-    old { paddleLEFTSTATE = MovingNorth }
-  | key SDL.SDLK_DOWN =
-    old { paddleLEFTSTATE = MovingSouth }
-  | key SDL.SDLK_w =
-    old { paddleRIGHTSTATE = MovingNorth }
-  | key SDL.SDLK_s =
-    old { paddleRIGHTSTATE = MovingSouth }
-  | otherwise = old { paddleLEFTSTATE = Stationary, paddleRIGHTSTATE = Stationary }
-
 notMoreThan :: Int -> Int -> Int
 notMoreThan a b
   | a > b = b
