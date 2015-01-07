@@ -24,7 +24,6 @@
 
 module Input where
 
-import Prelude
 import Data.List (findIndices)
 
 import Game

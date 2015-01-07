@@ -24,8 +24,6 @@
 
 module Game where
 
-import Prelude
-
 import qualified Graphics.UI.SDL as SDL
 
 -- The default amount of pixels a paddle can move while moving.

@@ -24,7 +24,6 @@
 
 {-# LANGUAGE FlexibleContexts #-} -- required for the state monad functions
 
-import Prelude
 import Data.Maybe
 import GHC.Word
 
@@ -147,8 +146,11 @@ initEnv = do
     return (AppConfig screen background p1 p2 b, AppData myTimer frame cap font (newGameData screenWidth screenHeight p1 p2 b))
     
   where
-  
+    
+    cap :: Bool
     cap = True
+    
+    frame :: Int
     frame = 0
 
 {-- runLoop --
@@ -241,17 +243,24 @@ loop = do
   where
   
     -- A wrapper for the applySurface' function, lifting IO
+    applySurface'' :: Int -> Int -> SDL.Surface -> SDL.Surface -> Maybe SDL.Rect -> ReaderT AppConfig AppState Bool
     applySurface'' x y src dst clip = liftIO (applySurface' x y src dst clip)
     
     -- Calculate the seconds per frame
+    secsPerFrame :: Word32
     secsPerFrame = fromIntegral $ 1000 `div` framesPerSecond
     
     -- Draw a single object
+    drawObject :: (Int,Int) -> SDL.Surface -> SDL.Surface -> ReaderT AppConfig AppState Bool
     drawObject pos src dst =
       liftIO $ applySurface x y src dst
       where
-        x = fst $ pos
-        y = snd $ pos
+        
+        x :: Int
+        x = fst pos
+        
+        y :: Int
+        y = snd pos
     
     -- Adjust the position of the left paddle depending on its state.
     handleLeftPaddleState :: GameData -> GameData
@@ -260,8 +269,12 @@ loop = do
       | state == MovingSouth = old { paddleLEFTPOS = ( x, y+spd ) }
       | otherwise            = old
       where
-        x = fst $ pos
-        y = snd $ pos
+        
+        x :: Int
+        x = fst pos
+        
+        y :: Int
+        y = snd pos
     
     -- Adjust the position of the right paddle depending on its state.
     handleRightPaddleState :: GameData -> GameData
@@ -270,8 +283,12 @@ loop = do
       | state == MovingSouth = old { paddleRIGHTPOS = ( x, y+spd ) }
       | otherwise            = old
       where
-        x = fst $ pos
-        y = snd $ pos
+        
+        x :: Int
+        x = fst pos
+        
+        y :: Int
+        y = snd pos
     
     -- Adjusts the position of the ball depending on its state.
     handleBallState :: GameData -> GameData
@@ -286,8 +303,12 @@ loop = do
       | state == MovingSouthEast = old { ballPOS = ( x + spd, y + spd ) }
       | otherwise                = old
       where
-        x = fst $ pos
-        y = snd $ pos
+        
+        x :: Int
+        x = fst pos
+        
+        y :: Int
+        y = snd pos
     
     -- A function to invert the direction of an object.
     -- Used flip the ball's direction when it hits a wall
@@ -387,19 +408,41 @@ loop = do
           RightPaddleCollision
       | otherwise               = NoCollision
       where
+        
+        bx :: Int
         bx = fst $ ballPOS gdata
+        
+        by :: Int
         by = snd $ ballPOS gdata
+        
+        bw :: Int
         bw = SDL.surfaceGetWidth ball
+        
+        bh :: Int
         bh = SDL.surfaceGetHeight ball
         
+        p1x :: Int
         p1x = fst $ paddleLEFTPOS gdata
+        
+        p1y :: Int
         p1y = snd $ paddleLEFTPOS gdata
+        
+        p1w :: Int
         p1w = SDL.surfaceGetWidth p1
+        
+        p1h :: Int
         p1h = SDL.surfaceGetHeight p1
         
+        p2x :: Int
         p2x = fst $ paddleRIGHTPOS gdata
+        
+        p2y :: Int
         p2y = snd $ paddleRIGHTPOS gdata
+        
+        p2w :: Int
         p2w = SDL.surfaceGetWidth p2
+        
+        p2h :: Int
         p2h = SDL.surfaceGetHeight p2
 
 
