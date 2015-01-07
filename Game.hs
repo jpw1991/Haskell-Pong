@@ -5,34 +5,28 @@ import Prelude
 
 import qualified Graphics.UI.SDL as SDL
 
-{-
-
-  GameData stores all the state information per loop cycle, for example
-  the paddle positions, ball position, score, etc.
-
--}
-
--- the amount of pixels to move while moving
+-- The default amount of pixels a paddle can move while moving.
 paddleMovementSpeed :: Int
 paddleMovementSpeed = 2
 
--- the amount of space between the paddles and the edges of the screen
+-- The amount of space between the paddles and the edges of the screen.
 paddleMarginBuffer :: Int
 paddleMarginBuffer = 16
 
--- the result after the ball collides with something
+-- The result after the ball collides with something.
 data CollisionResult = NoCollision | LeftScores | RightScores | LeftPaddleCollision | RightPaddleCollision | LeftPaddleEdgeCollision | RightPaddleEdgeCollision | WallCollision deriving (Eq, Show)
 
--- the states of movement for all objects (paddles and balls)
+-- The states of movement for all objects (paddles and balls).
 data ObjectState = Stationary | MovingWest | MovingEast | MovingNorth | MovingSouth | MovingNorthWest | MovingNorthEast | MovingSouthWest | MovingSouthEast deriving (Eq, Show)
 
+-- The GameData structure contains information about all the entities in the game.
 data GameData = GameData {
-  -- left
+  -- left paddle
     scoreLEFT         :: Int
   , paddleLEFTSTATE   :: ObjectState
   , paddleLEFTPOS     :: (Int, Int)
   , paddleLEFTSPEED   :: Int
-  -- right
+  -- right paddle
   , scoreRIGHT        :: Int
   , paddleRIGHTSTATE  :: ObjectState
   , paddleRIGHTPOS    :: (Int, Int)
@@ -43,6 +37,7 @@ data GameData = GameData {
   , ballSPEED         :: Int
 }
 
+-- Returns a fresh GameData structure.
 newGameData :: Int -> Int -> SDL.Surface -> SDL.Surface -> SDL.Surface -> GameData
 newGameData w h p1 p2 b = GameData {
   -- left

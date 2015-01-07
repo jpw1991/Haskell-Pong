@@ -3,6 +3,7 @@
 
 import Prelude
 import Data.Maybe
+import GHC.Word
 
 import Drawing
 import Timer
@@ -32,6 +33,11 @@ windowCaption = "Haskell Pong"
 
 framesPerSecond :: Int
 framesPerSecond = 60
+
+-- The transparency key for our .png images
+-- It's an RGB value wrapped in the Maybe monad.
+transparencyKey :: Maybe(Word8, Word8, Word8)
+transparencyKey = Just (0xff,0x00,0xff)
 
 ---------------------------
 -- Data
@@ -97,22 +103,18 @@ putGameData :: MonadState AppData m => GameData -> m()
 putGameData gdata = modify $ \s -> s { gamedata = gdata }
 
 {-- initEnv --
- Here we initiate the application's environment. Importantly, wire the correct
- actions for the key press messages. -}
+ Here we initiate the application's environment. -}
 initEnv :: IO (AppConfig, AppData)
 initEnv = do
     screen <- SDL.setVideoMode screenWidth screenHeight 32 [SDL.SWSurface]
     SDL.setCaption windowCaption []
   
+    ---- Load the resources ----
     background   <- loadPNG "background.png" Nothing
     font         <- SDLTTF.openFont "cour.ttf" 72
     p1           <- loadPNG "redpaddle.png" Nothing
     p2           <- loadPNG "greenpaddle.png" Nothing
-    b            <- loadPNG "ball.png" (Just (0xff,0x00,0xff))
-    
-    
-    ---- Game Data ----
-    --gdata        <- return $ newGameData
+    b            <- loadPNG "ball.png" transparencyKey
     
     ---- Timer ----
     myTimer <- start defaultTimer
@@ -138,6 +140,7 @@ runLoop = evalStateT . runReaderT loop
 loop :: AppEnv ()
 loop = do
     
+    -- take the screen, background, paddle1, paddle2 and ball surfaces from the config
     AppConfig screen background p1 p2 b <- ask
     
     ---- FPS ----
@@ -214,35 +217,40 @@ loop = do
   
   where
   
+    -- A wrapper for the applySurface' function, lifting IO
     applySurface'' x y src dst clip = liftIO (applySurface' x y src dst clip)
     
+    -- Calculate the seconds per frame
     secsPerFrame = fromIntegral $ 1000 `div` framesPerSecond
     
-    --drawPaddle :: (Int, Int) -> SDL.Surface -> SDL.Surface -> Bool
+    -- Draw a single object
     drawObject pos src dst =
       liftIO $ applySurface x y src dst
       where
         x = fst $ pos
         y = snd $ pos
     
+    -- Adjust the position of the left paddle depending on its state.
     handleLeftPaddleState :: GameData -> GameData
-    handleLeftPaddleState old@GameData { paddleLEFTSTATE = state, paddleLEFTPOS = pos }
-      | state == MovingNorth = old { paddleLEFTPOS = ( x, y-paddleMovementSpeed ) }
-      | state == MovingSouth = old { paddleLEFTPOS = ( x, y+paddleMovementSpeed ) }
+    handleLeftPaddleState old@GameData { paddleLEFTSTATE = state, paddleLEFTPOS = pos, paddleLEFTSPEED = spd }
+      | state == MovingNorth = old { paddleLEFTPOS = ( x, y-spd ) }
+      | state == MovingSouth = old { paddleLEFTPOS = ( x, y+spd ) }
       | otherwise            = old
       where
         x = fst $ pos
         y = snd $ pos
     
+    -- Adjust the position of the right paddle depending on its state.
     handleRightPaddleState :: GameData -> GameData
-    handleRightPaddleState old@GameData { paddleRIGHTSTATE = state, paddleRIGHTPOS = pos }
-      | state == MovingNorth = old { paddleRIGHTPOS = ( x, y-paddleMovementSpeed ) }
-      | state == MovingSouth = old { paddleRIGHTPOS = ( x, y+paddleMovementSpeed ) }
+    handleRightPaddleState old@GameData { paddleRIGHTSTATE = state, paddleRIGHTPOS = pos, paddleRIGHTSPEED = spd }
+      | state == MovingNorth = old { paddleRIGHTPOS = ( x, y-spd ) }
+      | state == MovingSouth = old { paddleRIGHTPOS = ( x, y+spd ) }
       | otherwise            = old
       where
         x = fst $ pos
         y = snd $ pos
     
+    -- Adjusts the position of the ball depending on its state.
     handleBallState :: GameData -> GameData
     handleBallState old@GameData { ballSTATE = state, ballPOS = pos, ballSPEED = spd }
       | state == MovingWest      = old { ballPOS = ( x - spd, y ) }
@@ -257,10 +265,6 @@ loop = do
       where
         x = fst $ pos
         y = snd $ pos
-    
-    invertBall :: GameData -> GameData
-    invertBall old@GameData { ballSTATE = oldstate } =
-      old { ballSTATE = (invertObjectState oldstate) }
     
     -- A function to invert the direction of an object.
     -- Used flip the ball's direction when it hits a wall
@@ -306,6 +310,7 @@ loop = do
     
     -- Another function used to invert the direction of an object.
     -- Instead of the direct opposite, the object is rotated slightly.
+    -- Used for wall collisions.
     halfInvertObjectState :: ObjectState -> ObjectState
     halfInvertObjectState a
       | a == MovingWest      = MovingNorth
@@ -317,19 +322,30 @@ loop = do
       | a == MovingSouthWest = MovingNorthWest
       | a == MovingSouthEast = MovingNorthEast
     
+    -- The handleCollision decides what happens for every collision event in the game.
+    -- It returns a modified version of the GameData.
     handleCollision :: SDL.Surface -> SDL.Surface -> SDL.Surface -> GameData -> GameData
     handleCollision ball p1 p2 old@GameData { ballSTATE = oldstate, scoreLEFT = oldleftscore, scoreRIGHT = oldrightscore, ballSPEED = oldspd, paddleLEFTSPEED = oldlspeed, paddleRIGHTSPEED = oldrspeed } =
       case (checkForCollision ball p1 p2 old) of
-        LeftScores  -> old { ballSTATE = invertObjectState oldstate, ballPOS = ( (screenWidth `div` 2), (screenHeight `div` 2) ), scoreLEFT = (oldleftscore+1), ballSPEED = 2 }
-        RightScores -> old { ballSTATE = invertObjectState oldstate, ballPOS = ( (screenWidth `div` 2), (screenHeight `div` 2) ), scoreRIGHT = (oldrightscore+1), ballSPEED = 2 }
-        LeftPaddleCollision -> old { ballSTATE = straightInvertObjectState oldstate, ballSPEED = oldspd+1, paddleLEFTSPEED = oldlspeed+1, paddleRIGHTSPEED = oldrspeed+1 }
-        RightPaddleCollision -> old { ballSTATE = straightInvertObjectState oldstate, ballSPEED = oldspd+1, paddleLEFTSPEED = oldlspeed+1, paddleRIGHTSPEED = oldrspeed+1 }
-        LeftPaddleEdgeCollision -> old { ballSTATE = diagonalInvertObjectState oldstate, ballSPEED = oldspd+1, paddleLEFTSPEED = oldlspeed+1, paddleRIGHTSPEED = oldrspeed+1 }
-        RightPaddleEdgeCollision -> old { ballSTATE = diagonalInvertObjectState oldstate, ballSPEED = oldspd+1, paddleLEFTSPEED = oldlspeed+1, paddleRIGHTSPEED = oldrspeed+1 }
-        WallCollision -> old { ballSTATE = (halfInvertObjectState oldstate) }
-        _ -> old
+        LeftScores               -> old { ballSTATE = invertObjectState oldstate,         ballPOS   = screenCenter, scoreLEFT       = (oldleftscore+1),         ballSPEED        = 2 }
+        RightScores              -> old { ballSTATE = invertObjectState oldstate,         ballPOS   = screenCenter, scoreRIGHT      = (oldrightscore+1),        ballSPEED        = 2 }
+        LeftPaddleCollision      -> old { ballSTATE = straightInvertObjectState oldstate, ballSPEED = oldspd+1,     paddleLEFTSPEED = leftPaddleSpeedIncrease,  paddleRIGHTSPEED = rightPaddleSpeedIncrease }
+        RightPaddleCollision     -> old { ballSTATE = straightInvertObjectState oldstate, ballSPEED = oldspd+1,     paddleLEFTSPEED = leftPaddleSpeedIncrease,  paddleRIGHTSPEED = rightPaddleSpeedIncrease }
+        LeftPaddleEdgeCollision  -> old { ballSTATE = diagonalInvertObjectState oldstate, ballSPEED = oldspd+1,     paddleLEFTSPEED = leftPaddleSpeedIncrease,  paddleRIGHTSPEED = rightPaddleSpeedIncrease }
+        RightPaddleEdgeCollision -> old { ballSTATE = diagonalInvertObjectState oldstate, ballSPEED = oldspd+1,     paddleLEFTSPEED = leftPaddleSpeedIncrease,  paddleRIGHTSPEED = rightPaddleSpeedIncrease }
+        WallCollision            -> old { ballSTATE = (halfInvertObjectState oldstate) }
+        _                        -> old
+        where
+          screenCenter :: (Int,Int)
+          screenCenter = ( (screenWidth `div` 2), (screenHeight `div` 2) )
+          
+          leftPaddleSpeedIncrease :: Int
+          leftPaddleSpeedIncrease = (oldlspeed+1) `notMoreThan` 6
+          
+          rightPaddleSpeedIncrease :: Int
+          rightPaddleSpeedIncrease = (oldrspeed+1) `notMoreThan` 6
    
-    
+    -- Checks if the ball is colliding with a wall or a paddle.
     checkForCollision :: SDL.Surface -> SDL.Surface -> SDL.Surface -> GameData -> CollisionResult
     checkForCollision ball p1 p2 gdata
       | (bx+bw) >= screenWidth  = LeftScores    -- hits right wall
@@ -387,10 +403,6 @@ whileEvents act = do
   contains this new position.
 
 -}
-
--- With the @ operator we keep a reference to the old GameData copy
--- given to the function, and name its variables "oldx" and "oldy".
--- Then we return a fresh GameData with new values.
 
 handleInput :: SDL.Event -> GameData -> GameData
 --handleInput (SDL.KeyDown (SDL.Keysym SDL.SDLK_n _ _)) old = newGameData

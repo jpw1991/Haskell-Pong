@@ -32,19 +32,3 @@ getKeyState = alloca $ \numkeysPtr -> do
       numkeys <- peek numkeysPtr
       keys <- (map SDLUtil.toEnum . map fromIntegral . findIndices (== 1)) `fmap` peekArray (fromIntegral numkeys) keysPtr
       return $ (`elem` keys)
-
-notMoreThan :: Int -> Int -> Int
-notMoreThan a b
-  | a > b = b
-  | otherwise = a
-
-notLessThan :: Int -> Int -> Int
-notLessThan a b
-  | a < b = b
-  | otherwise = a
-
-notLessThanZero :: Int -> Int
-notLessThanZero a
-  | a < 0 = 0
-  | otherwise = a
-

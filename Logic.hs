@@ -9,3 +9,12 @@ boxesIntersect a1 a2 b1 b2
   | (snd a1) > (snd b2) = False
   | otherwise           = True
 
+notMoreThan :: Int -> Int -> Int
+notMoreThan a b
+  | a > b = b
+  | otherwise = a
+
+notLessThan :: Int -> Int -> Int
+notLessThan a b
+  | a < b = b
+  | otherwise = a
